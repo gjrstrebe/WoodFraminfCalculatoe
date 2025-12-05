@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wood Stud Framing Estimator</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Configure Inter font -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'primary': '#4f46e5',
+                        'secondary': '#10b981',
+                        'bg-dark': '#1f2937',
+                        'card-dark': '#374151',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-bg-dark text-gray-100 min-h-screen p-4 sm:p-8">
+
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl sm:text-4xl font-extrabold text-primary mb-6 text-center">
+            Wood Stud Framing Estimator
+        </h1>
+        <p class="text-sm text-gray-400 text-center mb-8">
+            Enter wall details (in feet) to estimate 2x4 or 2x6 lumber requirements.
+        </p>
+
+        <!-- Wall Input Section -->
+        <div id="wall-inputs" class="space-y-4 mb-8">
+            <!-- Walls will be rendered here -->
+        </div>
+
+        <button id="add-wall-btn" class="w-full bg-secondary hover:bg-emerald-500 text-white font-semibold py-3 px-4 rounded-lg transition duration-200 shadow-md flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
+            </svg>
+            Add Wall Section
+        </button>
+
+        <!-- Results Section -->
+        <div id="results-card" class="mt-10 p-6 bg-card-dark rounded-xl shadow-2xl">
+            <h2 class="text-2xl font-bold text-primary border-b border-gray-600 pb-3 mb-4">
+                Lumber Estimate Summary
+            </h2>
+            <div id="results-output" class="text-lg space-y-3">
+                <p>Enter at least one wall to calculate framing materials.</p>
+            </div>
+            <div class="mt-6 text-sm text-gray-400 border-t border-gray-700 pt-3">
+                <p>Note: Calculations assume 8 ft walls (92 5/8" studs) and standard framing practices (double top plate, 3-stud corners, 2-stud intersections).</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global state for walls
+        let walls = [];
+        let wallIdCounter = 0;
+
+        // Configuration constants
+        const STUD_SPACING_OPTIONS = [16, 24]; // inches
+        const STANDARD_DOOR_WIDTH_FT = 3;
+        const STANDARD_WINDOW_WIDTH_FT = 3;
+        const FULL_STUD_LENGTH_INCHES = 92.625; // 92 5/8" for 8ft ceiling
+
+        // Utility function to safely get numeric input
+        function getNum(id) {
+            const el = document.getElementById(id);
+            return parseFloat(el ? el.value : 0) || 0;
+        }
+
+        // --- Core Calculation Logic ---
+
+        /**
+         * Calculates the total framing materials needed for all defined walls.
+         */
+        function calculateFraming() {
+            let totalPlateLF = 0;
+            let totalFullStuds = 0;
+            let totalTrimmerStuds = 0;
+            let totalHeaderLF = 0;
+            let totalCrippleStuds = 0;
+
+            walls.forEach(wall => {
+                const wallLength = wall.length;
+                const wallHeight = wall.height;
+                const spacing = wall.spacing;
+                const doorCount = wall.doorCount;
+                const windowCount = wall.windowCount;
+
+                if (wallLength <= 0 || spacing <= 0) return;
+
+                // 1. Plate Linear Footage (LF)
+                // Assumes 1 bottom plate and 2 top plates (double top plate)
+                totalPlateLF += wallLength * 3;
+
+                // 2. Gross Stud Count (16" OC for vertical studs + 2 for corners/ends)
+                // Studs = (Length * 12 / Spacing) + 2 (Round up)
+                let grossStuds = Math.ceil((wallLength * 12) / spacing);
+                grossStuds += 2; // Adding 2 for corner/end closure for this wall segment
+
+                // 3. Opening Calculations (Doors)
+                for (let i = 0; i < doorCount; i++) {
+                    const openingWidth = STANDARD_DOOR_WIDTH_FT;
+                    
+                    // a. Deduction for main studs
+                    // Approx studs to deduct in the opening width
+                    const deductedStuds = Math.ceil((openingWidth * 12) / spacing) - 1;
+                    grossStuds -= deductedStuds > 0 ? deductedStuds : 1;
+
+                    // b. Add King Studs (2 per door)
+                    totalFullStuds += 2;
+
+                    // c. Add Trimmer Studs (2 per door)
+                    totalTrimmerStuds += 2;
+
+                    // d. Header (Assume standard 2-ply header for total linear footage)
+                    // Header length = Opening width + 2 * (Trimmer width ~ 1.5 in)
+                    const headerLength = openingWidth + (3 / 12); // 3 feet + 3 inches
+                    totalHeaderLF += headerLength * 2; // For 2-ply header
+
+                    // e. Cripple Studs above the door (for ~12" gap between header and top plate)
+                    const crippleGapStuds = Math.ceil((openingWidth * 12) / spacing) - 1;
+                    totalCrippleStuds += crippleGapStuds > 0 ? crippleGapStuds : 0;
+                }
+
+                // 4. Opening Calculations (Windows)
+                for (let i = 0; i < windowCount; i++) {
+                    const openingWidth = STANDARD_WINDOW_WIDTH_FT;
+                    
+                    // a. Deduction for main studs
+                    const deductedStuds = Math.ceil((openingWidth * 12) / spacing) - 1;
+                    grossStuds -= deductedStuds > 0 ? deductedStuds : 1;
+
+                    // b. Add King Studs (2 per window)
+                    totalFullStuds += 2;
+
+                    // c. Add Trimmer Studs (2 per window)
+                    totalTrimmerStuds += 2;
+
+                    // d. Header (Assume standard 2-ply header)
+                    const headerLength = openingWidth + (3 / 12); // 3 feet + 3 inches
+                    totalHeaderLF += headerLength * 2; // For 2-ply header
+
+                    // e. Cripple Studs above and below the window
+                    const crippleGapStuds = Math.ceil((openingWidth * 12) / spacing) - 1;
+                    totalCrippleStuds += crippleGapStuds * 2; // Above and below
+
+                    // f. Window Sill (1 piece) - Add to Cripple/Sill LF
+                    totalPlateLF += openingWidth; // Add one sill plate (just to total plate LF for now)
+                }
+
+                // 5. Net Full Height Studs
+                // Gross Studs - Deductions (already handled above)
+                totalFullStuds += grossStuds;
+
+                // Ensure counts are non-negative
+                totalFullStuds = Math.max(0, totalFullStuds);
+            });
+
+            // 6. Final Results Object
+            const results = {
+                plateLF: totalPlateLF,
+                fullStudCount: totalFullStuds,
+                trimmerStudCount: totalTrimmerStuds,
+                headerLF: totalHeaderLF,
+                crippleStudCount: totalCrippleStuds,
+            };
+
+            renderResults(results);
+        }
+
+        // --- DOM Manipulation / Rendering ---
+
+        /**
+         * Renders the calculated material results to the UI.
+         */
+        function renderResults(results) {
+            const outputEl = document.getElementById('results-output');
+            
+            if (walls.length === 0) {
+                outputEl.innerHTML = '<p>Enter at least one wall to calculate framing materials.</p>';
+                return;
+            }
+
+            // Convert total linear feet of plates and headers into standard lumber lengths (e.g., 16ft, 12ft)
+            // For simplicity, we'll just show the total linear footage.
+
+            outputEl.innerHTML = `
+                <div class="grid grid-cols-2 gap-4 text-center">
+                    <div class="p-3 bg-gray-700 rounded-lg">
+                        <p class="text-2xl font-extrabold text-secondary">${Math.ceil(results.plateLF).toLocaleString()}</p>
+                        <p class="text-sm text-gray-300">Total Plate Linear Feet (LF)</p>
+                    </div>
+                    <div class="p-3 bg-gray-700 rounded-lg">
+                        <p class="text-2xl font-extrabold text-secondary">${Math.ceil(results.fullStudCount).toLocaleString()}</p>
+                        <p class="text-sm text-gray-300">Full Height Studs (e.g., 92 5/8")</p>
+                    </div>
+                    <div class="p-3 bg-gray-700 rounded-lg">
+                        <p class="text-2xl font-extrabold text-secondary">${Math.ceil(results.trimmerStudCount).toLocaleString()}</p>
+                        <p class="text-sm text-gray-300">Trimmer/Jack Studs (Pieces)</p>
+                    </div>
+                    <div class="p-3 bg-gray-700 rounded-lg">
+                        <p class="text-2xl font-extrabold text-secondary">${Math.ceil(results.headerLF).toLocaleString()}</p>
+                        <p class="text-sm text-gray-300">Header Material Linear Feet (2-ply)</p>
+                    </div>
+                    <div class="col-span-2 p-3 bg-gray-700 rounded-lg">
+                        <p class="text-2xl font-extrabold text-secondary">${Math.ceil(results.crippleStudCount).toLocaleString()}</p>
+                        <p class="text-sm text-gray-300">Cripple Studs (Short Pieces)</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        /**
+         * Renders the input card for a single wall.
+         */
+        function renderWallInput(wall) {
+            const wallInputsEl = document.getElementById('wall-inputs');
+            
+            // Create the main wall card div
+            const wallCard = document.createElement('div');
+            wallCard.id = `wall-${wall.id}`;
+            wallCard.className = "p-4 sm:p-6 bg-card-dark rounded-xl shadow-lg border border-gray-600 space-y-4";
+            
+            // Generate the HTML for the card
+            wallCard.innerHTML = `
+                <div class="flex justify-between items-center border-b border-gray-600 pb-3 mb-3">
+                    <h3 class="text-xl font-semibold text-gray-100">Wall Section ${wall.id}</h3>
+                    <button onclick="removeWall(${wall.id})" class="text-red-400 hover:text-red-500 transition duration-150">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 100 2v6a1 1 0 100-2V8z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+                
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <!-- Wall Length Input -->
+                    <div>
+                        <label for="length-${wall.id}" class="block text-sm font-medium text-gray-400">Length (ft)</label>
+                        <input type="number" id="length-${wall.id}" value="${wall.length}" min="1" step="0.5" class="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-primary focus:ring-primary p-2" oninput="updateWall(${wall.id})">
+                    </div>
+
+                    <!-- Wall Height Input (Fixed to 8ft for stud calculation simplicity) -->
+                    <div>
+                        <label for="height-${wall.id}" class="block text-sm font-medium text-gray-400">Height (ft)</label>
+                        <select id="height-${wall.id}" class="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-primary focus:ring-primary p-2" onchange="updateWall(${wall.id})">
+                            <option value="8" selected>8 ft (Common)</option>
+                            <option value="9">9 ft</option>
+                            <option value="10">10 ft</option>
+                        </select>
+                    </div>
+
+                    <!-- Stud Spacing Input -->
+                    <div>
+                        <label for="spacing-${wall.id}" class="block text-sm font-medium text-gray-400">Spacing (in OC)</label>
+                        <select id="spacing-${wall.id}" class="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-primary focus:ring-primary p-2" onchange="updateWall(${wall.id})">
+                            <option value="16" ${wall.spacing === 16 ? 'selected' : ''}>16" OC</option>
+                            <option value="24" ${wall.spacing === 24 ? 'selected' : ''}>24" OC</option>
+                        </select>
+                    </div>
+
+                    <!-- Framing Material (2x4 / 2x6) -->
+                    <div>
+                        <label for="material-${wall.id}" class="block text-sm font-medium text-gray-400">Material</label>
+                        <select id="material-${wall.id}" class="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-primary focus:ring-primary p-2">
+                            <option value="2x4">2x4</option>
+                            <option value="2x6">2x6</option>
+                        </select>
+                    </div>
+
+                </div>
+
+                <!-- Openings -->
+                <div class="grid grid-cols-2 gap-4 pt-2">
+                    <!-- Door Count -->
+                    <div>
+                        <label for="door-count-${wall.id}" class="block text-sm font-medium text-gray-400">Doors (3 ft wide estimate)</label>
+                        <input type="number" id="door-count-${wall.id}" value="${wall.doorCount}" min="0" class="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-primary focus:ring-primary p-2" oninput="updateWall(${wall.id})">
+                    </div>
+
+                    <!-- Window Count -->
+                    <div>
+                        <label for="window-count-${wall.id}" class="block text-sm font-medium text-gray-400">Windows (3 ft wide estimate)</label>
+                        <input type="number" id="window-count-${wall.id}" value="${wall.windowCount}" min="0" class="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-primary focus:ring-primary p-2" oninput="updateWall(${wall.id})">
+                    </div>
+                </div>
+            `;
+            
+            // Append the new card to the container
+            wallInputsEl.appendChild(wallCard);
+        }
+
+
+        /**
+         * Adds a new default wall section.
+         */
+        function addWall() {
+            wallIdCounter++;
+            const newWall = {
+                id: wallIdCounter,
+                length: 12, // Default 12 ft
+                height: 8,  // Default 8 ft
+                spacing: 16, // Default 16" OC
+                doorCount: 0,
+                windowCount: 0
+            };
+            walls.push(newWall);
+            renderWallInput(newWall);
+            calculateFraming();
+        }
+
+        /**
+         * Removes a wall section by its ID.
+         */
+        function removeWall(id) {
+            walls = walls.filter(wall => wall.id !== id);
+            const wallEl = document.getElementById(`wall-${id}`);
+            if (wallEl) {
+                wallEl.remove();
+            }
+            calculateFraming();
+        }
+
+        /**
+         * Updates the state of a wall based on form input.
+         */
+        function updateWall(id) {
+            const wallIndex = walls.findIndex(wall => wall.id === id);
+            if (wallIndex === -1) return;
+
+            // Update the wall object from the DOM values
+            walls[wallIndex].length = getNum(`length-${id}`);
+            walls[wallIndex].height = getNum(`height-${id}`);
+            walls[wallIndex].spacing = parseInt(document.getElementById(`spacing-${id}`).value) || 16;
+            walls[wallIndex].doorCount = getNum(`door-count-${id}`);
+            walls[wallIndex].windowCount = getNum(`window-count-${id}`);
+
+            calculateFraming();
+        }
+
+
+        // --- Initialization ---
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            // Setup Event Listeners
+            document.getElementById('add-wall-btn').addEventListener('click', addWall);
+
+            // Add the initial wall section on load
+            addWall();
+        });
+    </script>
+</body>
+</html>
+
